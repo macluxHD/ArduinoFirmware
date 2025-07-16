@@ -11,7 +11,7 @@
 #include "Communications/SerialCommStream.h"
 
 #include "TimingUtils.h"
-
+#include <optional>
 // Timing variables
 unsigned long lastTime = 0;
 unsigned long timeStep = 10; // period used to update CPG state variables and servo motor control (do NOT modify!!)
@@ -65,6 +65,10 @@ void ledControl()
     analogWrite(LED_BUILTIN, ledState);
 }
 
+bool sessionStarted = false;
+size_t lastPacketUpdateTime = 0;
+size_t updateInterval = 100;
+
 void loop()
 {
     // Used as a visual indicator of functionality
@@ -79,17 +83,27 @@ void loop()
     unsigned long time = millis();
     unsigned long deltaTimeMS = time - lastTime;
 
-    lastTime = time; // update the previous time step (do NOT modify!!)
-
     // If it hasn't been 10ms since last update, we skip updating the oscillator
     if (deltaTimeMS < 10)
         return;
+
+    lastTime = time; // update the previous time step (do NOT modify!!)
 
     double deltaTimeS = deltaTimeMS * MS_TO_S; // Make an interval with seconds
     if (pwmPresent)
     {
         for (auto &oscillator : oscillators)
             oscillator.update(deltaTimeS);
+    }
+
+    if (sessionStarted)
+    {
+        lastPacketUpdateTime += deltaTimeMS;
+        if (lastPacketUpdateTime >= updateInterval)
+        {
+            sendDataBatch(&SerialComms, &WifiComms);
+            lastPacketUpdateTime = 0;
+        }
     }
 }
 
@@ -102,7 +116,86 @@ enum PacketInstructions
     UPDATE_OSCILLATOR = 3,
     SEND_MOTOR_DATA = 4,
     SEND_IMU_DATA = 5,
+
+    SEND_ALL_DATA = 69,
 };
+
+void sendDataBatch(ICommStream *commStream, ICommStream *commStream2)
+{
+    commStream->begin();
+    commStream2->begin();
+    writeTo(commStream, commHeader, 2);
+    writeTo(commStream2, commHeader, 2);
+    writeTo(commStream, SEND_ALL_DATA);
+    writeTo(commStream2, SEND_ALL_DATA);
+    // Provides the current time based on the reference timestamp, used by the server to keep track of the last known arduino time
+    //  (Probably could compute it themselves tbh)
+    // The sent data is escaped as it may contain the header/footer bytes due to the variable nature of the time
+    {
+        auto returnedTime = TimingUtils::getTimeMillis();
+        auto dataBytes = reinterpret_cast<const char *>(&returnedTime);
+
+        // These data bytes may accidentally contain the header or footer, let's escape it to be safe
+        size_t adjustedLength = countEscapedLength(dataBytes, 4);
+        char escapedData[adjustedLength];
+
+        escapeData(dataBytes, escapedData, adjustedLength);
+        writeTo(commStream, escapedData, adjustedLength);
+        writeTo(commStream2, escapedData, adjustedLength);
+    }
+
+    // Transfer current motor state
+    for (auto &osc : oscillators)
+    {
+        auto &data = osc.getState();
+
+        const char *bytes = reinterpret_cast<const char *>(&data);
+
+        size_t escapedLength = countEscapedLength(bytes, sizeof(OscillatorState));
+
+        char escapedBuffer[escapedLength];
+
+        escapeData(bytes, escapedBuffer, sizeof(OscillatorState));
+
+        writeTo(commStream, escapedBuffer, escapedLength);
+        writeTo(commStream2, escapedBuffer, escapedLength);
+    }
+
+    // Transfer IMU data
+    {
+        auto &data = imu.rawData;
+        const char *dataBytes = reinterpret_cast<const char *>(&data);
+
+        // These data bytes may accidentally contain the header or footer, let's escape it to be safe
+        auto adjustedLength = countEscapedLength(dataBytes, sizeof(IMUSensor::IMUData));
+        char escapedData[adjustedLength];
+
+        escapeData(dataBytes, escapedData, sizeof(IMUSensor::IMUData));
+
+        writeTo(commStream, escapedData, adjustedLength);
+        writeTo(commStream2, escapedData, adjustedLength);
+    }
+
+    writeTo(commStream, commFooter, 2);
+    writeTo(commStream2, commFooter, 2);
+    commStream->begin();
+    commStream2->end();
+}
+
+void writeTo(ICommStream *commStream, const char *data, size_t length)
+{
+    if (commStream == nullptr)
+        return;
+
+    commStream->write(data, length);
+}
+void writeTo(ICommStream *commStream, byte data)
+{
+    if (commStream == nullptr)
+        return;
+
+    commStream->write(data);
+}
 
 // Takes parses a received packet, which contain an instruction and optionally additional data
 // This method may write a response via the provided ICommStream pointer
@@ -161,31 +254,13 @@ void packetHandler(char *packet, size_t packetSize, ICommStream *commStream)
         std::memcpy(&offsetTime, packetData, sizeof(size_t));
 
         TimingUtils::setOffsetTime(offsetTime);
+        sessionStarted = true;
         break;
     }
 
-    // Provides the current time based on the reference timestamp, used by the server to keep track of the last known arduino time
-    //  (Probably could compute it themselves tbh)
-    // The sent data is escaped as it may contain the header/footer bytes due to the variable nature of the time
-    case GET_TIME:
-    {
-        auto returnedTime = TimingUtils::getTimeMillis();
-        auto dataBytes = reinterpret_cast<const char *>(&returnedTime);
-
-        // These data bytes may accidentally contain the header or footer, let's escape it to be safe
-        size_t adjustedLength = countEscapedLength(dataBytes, 4);
-        char escapedData[adjustedLength];
-
-        escapeData(dataBytes, escapedData, adjustedLength);
-
-        commStream->begin();
-        commStream->write(commHeader, 2);
-        commStream->write(GET_TIME);
-        commStream->write(escapedData, adjustedLength);
-        commStream->write(commFooter, 2);
-        commStream->end();
+    case SEND_ALL_DATA:
+        sendDataBatch(commStream, nullptr);
         break;
-    }
 
     // The host is sending updated oscillator parameters
     // The packet data contains 2 arguments, the first byte is the target oscillator
@@ -198,47 +273,6 @@ void packetHandler(char *packet, size_t packetSize, ICommStream *commStream)
         std::memcpy(&updateCommand, packetData + 1, sizeof(OscillatorParams));
         oscillators[targetOscillator].setParams(updateCommand);
 
-        break;
-    }
-
-    // The host is requesting the current oscillator states (not to be confused with the oscillator params)
-    // The sent data is escaped as it may contain the header/footer bytes due to the variable nature of the the state variables
-    case SEND_MOTOR_DATA:
-    {
-        for (auto &osc : oscillators)
-        {
-            auto &data = osc.getState();
-
-            const char *bytes = reinterpret_cast<const char *>(&data);
-
-            size_t escapedLength = countEscapedLength(bytes, sizeof(OscillatorState));
-
-            char escapedBuffer[escapedLength];
-
-            escapeData(bytes, escapedBuffer, sizeof(OscillatorState));
-
-            commStream->begin();
-            commStream->write(commHeader, 2);
-            commStream->write(SEND_MOTOR_DATA);
-            commStream->write(osc.id);
-            commStream->write(escapedBuffer, escapedLength);
-            commStream->write(commFooter, 2);
-            commStream->end();
-        }
-
-        break;
-    }
-
-    // The host is requesting current IMU sensor data
-    // The sent data is escaped as it may contain the header/footer bytes due to the variable nature of the the IMU variables
-    case SEND_IMU_DATA:
-    {
-        commStream->begin();
-        commStream->write(commHeader, 2);
-        commStream->write(SEND_IMU_DATA);
-        imu.printTo(commStream);
-        commStream->write(commFooter, 2);
-        commStream->end();
         break;
     }
     }

@@ -79,7 +79,8 @@ private:
     bool initialized = false;
     uint32_t lastUpdateTime = 0;
 
-    struct
+public:
+    struct IMUData
     {
         SensorInfo<vec3> gyroscope{}; // We are getting this
         SensorInfo<vec3> accelerometer{};
@@ -88,7 +89,6 @@ private:
         SensorInfo<quarternion> rotation{};
     } rawData;
 
-public:
     void init()
     {
 #if IMU_SPI == 1

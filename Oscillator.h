@@ -34,7 +34,7 @@ public:
 
         float position = state.amp * sinf(state.phase - state.phaseShift) + state.offset;
 
-        uint16_t motorAngle = map(constrain(position, 0, 180), 0, 180, servoMin, servoMax);
+        uint16_t motorAngle = map(constrain(position, 25, 180), 0, 180, servoMin, servoMax);
 
         pwm->setPWM(id, 0, motorAngle);
     }
