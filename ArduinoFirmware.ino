@@ -178,7 +178,7 @@ void sendDataBatch(ICommStream *commStream, ICommStream *commStream2)
 
     writeTo(commStream, commFooter, 2);
     writeTo(commStream2, commFooter, 2);
-    commStream->begin();
+    commStream->end();
     commStream2->end();
 }
 
@@ -230,6 +230,9 @@ void packetHandler(char *packet, size_t packetSize, ICommStream *commStream)
         commStream->write(commHeader, 2);
         commStream->write(IDENTIFY); // Write the instruction as a response
         commStream->write((uint8_t *)idCode.c_str(), idCode.length());
+        commStream->write(0);
+        commStream->write(NUM_OSCILLATORS);
+        commStream->write((byte*)oscillatorColours, sizeof(u_int16_t) * NUM_OSCILLATORS);
         commStream->write(commFooter, 2);
         commStream->end();
         break;

@@ -7,7 +7,7 @@
 #include "Oscillator.h"
 
 // Name of the device
-const std::string idCode{"Frontier"};
+const std::string idCode{"Suzanne"};
 
 // Packet headers and footers
 const char commHeader[]{'E', 'D'};
@@ -24,16 +24,17 @@ const char pass[]{"edmotest"}; // your network password
 #endif
 
 // Oscilator specifications
-const unsigned int NUM_OSCILLATORS = 8; // this number has to match entries in array osc[] (do NOT modify!!)
-Oscillator oscillators[NUM_OSCILLATORS] = {
+
+Oscillator oscillators[] = {
     Oscillator(100, 600),
     Oscillator(100, 600),
     Oscillator(100, 600),
-    Oscillator(100, 600),
-    Oscillator(100, 600),
-    Oscillator(100, 600),
-    Oscillator(100, 600),
-    Oscillator(100, 600),
+    Oscillator(100, 600)
+};
+
+const uint16_t NUM_OSCILLATORS = sizeof(oscillators) / sizeof(oscillators[0]); // this number has to match entries in array osc[] (do NOT modify!!)
+const uint16_t oscillatorColours[] {
+    0,120,240,60
 };
 
 
