@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../globals.h"
+#include "DummyCommStream.h"
+
 #if WIFI_SUPPORT == 1
 #include <WiFi101.h>
 #include <WiFiUdp.h>
@@ -8,7 +10,6 @@
 #include "ICommStream.h"
 #include "WiFiCommStream.h"
 #include <unordered_map>
-#include "DummyCommStream.h"
 
 class WifiCommManager
 {
@@ -86,15 +87,24 @@ private:
 
 #else
 // A dummied out version of WiFiCommManager
-class WifiCommManager : public virtual ICommStream
+class WifiCommManager
 {
 public:
-    void init() override
+    void init()
     {
     }
 
-    void update() override
+    void update()
     {
+    }
+
+    void PerformOnAllChannels(std::function<void(ICommStream *)> action)
+    {
+    }
+
+    ICommStream *GetChannelWithUUID(const UUID &uuid)
+    {
+        return &dummyComms;
     }
 
     using PacketHandler = ICommStream::PacketHandler;

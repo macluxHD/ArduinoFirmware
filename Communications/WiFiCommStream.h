@@ -1,12 +1,12 @@
 #pragma once
 
 #include "../globals.h"
-#include <WiFi101.h>
-#include <WiFiUdp.h>
-
 #include "ICommStream.h"
 
 #if WIFI_SUPPORT == 1
+
+#include <WiFi101.h>
+#include <WiFiUdp.h>
 class WiFiCommStream : public virtual ICommStream
 {
 private:
