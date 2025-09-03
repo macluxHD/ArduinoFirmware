@@ -10,18 +10,18 @@
 class WiFiCommStream : public virtual ICommStream
 {
 private:
-    WiFiUDP udp{};
-    IPAddress remoteIP;
+    WiFiUDP& udp;
+    const IPAddress remoteIP;
     uint16_t remotePort;
 
-public:
-    void init() override
-    {
-        WiFi.setPins(8, 7, 4, 2);
-        WiFi.hostname(hostname.c_str());
-        WiFi.begin(ssid, pass);
+    WiFiCommStream(WiFiUDP& host, IPAddress remoteIP, u_int16_t remotePort)
+        : udp{host}, remoteIP{remoteIP}, remotePort{remotePort} { }
 
-        udp.begin(2121);
+public:
+
+    void init()
+    {
+        // Intentionally dummied out, no initialisation is necessary
     }
 
     void write(const uint8_t *const data, size_t length) override
@@ -44,59 +44,27 @@ public:
         udp.endPacket();
     }
 
-    void update() override
+    void receive(int packetSize, char *packetBuffer)
     {
-        int packetSize = udp.parsePacket();
-
-        if (packetSize == 0)
-            return;
-
-        remoteIP = udp.remoteIP();
-        remotePort = udp.remotePort();
-
-        char packetBuffer[packetSize];
-
-        int length = udp.read(packetBuffer, packetSize);
-
-        if (!buffcmp(packetBuffer, commHeader, 2) || !buffcmp(packetBuffer + length - 2, commFooter, 2))
+        if (!buffcmp(packetBuffer, commHeader, 2) || !buffcmp(packetBuffer + packetSize - 2, commFooter, 2))
             return;
 
         parsePacket(packetBuffer, packetSize, this);
     }
-};
-#else
-// A dummied out version of WiFiCommStream
-class WiFiCommStream : public virtual ICommStream
-{
-public:
-    void init() override
-    {
-    }
 
-    void write(const uint8_t *data, size_t length)
-    {
-    }
-    
-    void write(const uint8_t byte)
-    {
-    }
-
-    void write(const char *const data, size_t length) override
-    {
+    void updatePort(uint16_t port){
+        remotePort = port;
     }
 
     void update() override
     {
+        // Intentionally dummied out, this stream doesn't manage its own updates
     }
 
-    void begin() override
-    {
-    }
-
-    void end() override
-    {
-    }
+    friend class WifiCommManager;
 };
-#endif
+#else
+#include "DummyCommStream.h"
 
-WiFiCommStream WifiComms;
+using WiFiCommStream = DummyCommStream;
+#endif

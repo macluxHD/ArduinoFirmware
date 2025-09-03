@@ -2,10 +2,13 @@
 
 #include <functional>
 #include "PacketUtils.h"
+#include "../UUID.h"
 
 class ICommStream
 {
 public:
+    UUID identifier {};
+    
     virtual void init() = 0;
     virtual void update() = 0;
     virtual void write(const uint8_t *constdata, size_t length) = 0;
@@ -19,9 +22,6 @@ public:
     virtual void end() = 0;
 
     using PacketHandler = std::function<void(char *, size_t, ICommStream *)>;
-
-    PacketHandler handler;
-    bool packetHandlerBound;
 
     void bindPacketHandler(PacketHandler handler)
     {
@@ -37,4 +37,8 @@ protected:
 
         handler(packet, length, commStream);
     }
+
+private:
+    PacketHandler handler;
+    bool packetHandlerBound;
 };

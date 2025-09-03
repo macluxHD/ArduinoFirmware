@@ -7,7 +7,8 @@
 #include "IMUSensor.h"
 
 #include "Communications/PacketUtils.h"
-#include "Communications/WiFiCommStream.h"
+#include "Communications/WiFiCommManager.h"
+#include "CommunicationSemaphore.h"
 #include "Communications/SerialCommStream.h"
 
 #include "TimingUtils.h"
@@ -21,6 +22,10 @@ const float MS_TO_S = 1.0f / 1000.0f;
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
 
 bool pwmPresent = false;
+
+// Create a semaphore that weakens after 10s
+CommunicationSemaphore semaphore{10000};
+ICommStream *secondaryCommstream = &dummyComms;
 
 void setup()
 {
@@ -101,7 +106,7 @@ void loop()
         lastPacketUpdateTime += deltaTimeMS;
         if (lastPacketUpdateTime >= updateInterval)
         {
-            sendDataBatch(&SerialComms, &WifiComms);
+            sendDataBatch(&SerialComms, secondaryCommstream);
             lastPacketUpdateTime = 0;
         }
     }
@@ -116,6 +121,8 @@ enum PacketInstructions
     UPDATE_OSCILLATOR = 3,
     SEND_MOTOR_DATA = 4,
     SEND_IMU_DATA = 5,
+
+    SESSION_END = 6,
 
     SEND_ALL_DATA = 69,
 };
@@ -226,15 +233,10 @@ void packetHandler(char *packet, size_t packetSize, ICommStream *commStream)
     // Also used during Wifi communication to indicate presence on the network (aka pinging)
     case IDENTIFY:
     {
-        commStream->begin();
-        commStream->write(commHeader, 2);
-        commStream->write(IDENTIFY); // Write the instruction as a response
-        commStream->write((uint8_t *)idCode.c_str(), idCode.length());
-        commStream->write(0);
-        commStream->write(NUM_OSCILLATORS);
-        commStream->write((byte*)oscillatorColours, sizeof(u_int16_t) * NUM_OSCILLATORS);
-        commStream->write(commFooter, 2);
-        commStream->end();
+        // Retrieve the unique identifier of the remote, will be used for locks
+        std::memcpy(&(commStream->identifier), packetData, sizeof(UUID));
+
+        announceIdentity(commStream);
         break;
     }
 
@@ -245,6 +247,12 @@ void packetHandler(char *packet, size_t packetSize, ICommStream *commStream)
     //    (otherwise the restarted device will report back with timestamp 0, causing serverside logging to be non-linear)
     case SESSION_START:
     {
+        if (!semaphore.acquire(commStream->identifier))
+            break;
+
+        announceIdentity(&SerialComms);
+        WifiComms.PerformOnAllChannels(announceIdentity);
+
         // Make sure all oscillators are reset to initial state
         for (auto osc : oscillators)
             osc.reset();
@@ -258,11 +266,15 @@ void packetHandler(char *packet, size_t packetSize, ICommStream *commStream)
 
         TimingUtils::setOffsetTime(offsetTime);
         sessionStarted = true;
+        lastPacketUpdateTime = 0;
+
+        secondaryCommstream = WifiComms.GetChannelWithUUID(commStream->identifier);
+
         break;
     }
 
     case SEND_ALL_DATA:
-        sendDataBatch(commStream, nullptr);
+        sendDataBatch(commStream, secondaryCommstream);
         break;
 
     // The host is sending updated oscillator parameters
@@ -270,6 +282,10 @@ void packetHandler(char *packet, size_t packetSize, ICommStream *commStream)
     // The rest of the packet data is the oscillator parameters
     case UPDATE_OSCILLATOR:
     {
+        // This has the side effect of refreshing the lock
+        if (!semaphore.acquire(commStream->identifier))
+            break;
+
         uint8_t targetOscillator = packetData[0];
         OscillatorParams updateCommand{};
 
@@ -278,5 +294,33 @@ void packetHandler(char *packet, size_t packetSize, ICommStream *commStream)
 
         break;
     }
+
+    case SESSION_END:
+    {
+        if (!semaphore.release(commStream->identifier))
+            break;
+
+        sessionStarted = false;
+        announceIdentity(&SerialComms);
+        WifiComms.PerformOnAllChannels(announceIdentity);
+        break;
     }
+    }
+}
+
+void announceIdentity(ICommStream *commStream)
+{
+    commStream->begin();
+    commStream->write(commHeader, 2);
+    commStream->write(IDENTIFY); // Write the instruction as a response
+    commStream->write((uint8_t *)idCode.c_str(), idCode.length());
+    commStream->write(0);
+    commStream->write(NUM_OSCILLATORS);
+    commStream->write((byte *)oscillatorColours, sizeof(u_int16_t) * NUM_OSCILLATORS);
+
+    // Write the current lock state
+    commStream->write(!semaphore.lockExpired() && semaphore.currentLockHolder() != commStream->identifier);
+    commStream->write(commFooter, 2);
+
+    commStream->end();
 }

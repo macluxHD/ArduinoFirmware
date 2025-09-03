@@ -2,6 +2,7 @@
     "C_Cpp.intelliSenseEngine": "default",
     "C_Cpp.default.compilerPath": "/home/derrick/.arduino15/packages/adafruit/tools/arm-none-eabi-gcc/9-2019q4/bin/arm-none-eabi-g++",
     "files.associations": {
+        "**/.vscode/*.json": "jsonc",
         "array": "cpp",
         "atomic": "cpp",
         "bit": "cpp",
@@ -45,6 +46,7 @@
         "stdexcept": "cpp",
         "streambuf": "cpp",
         "cinttypes": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "cstring": "cpp"
     },
 }
