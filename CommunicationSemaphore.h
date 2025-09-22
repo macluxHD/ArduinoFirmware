@@ -48,7 +48,7 @@ public:
 
 private:
     UUID lockHolder{{0, 0, 0, 0}};
-    ulong lockTime{0};
+    long lockTime{LONG_MIN};
 
     const ulong lockExpiry;
 };
