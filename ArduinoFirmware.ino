@@ -126,15 +126,25 @@ enum PacketInstructions
 
     SEND_ALL_DATA = 69,
 };
-
+void copy(const char *from, char *to, size_t length, size_t offset)
+{
+    for (int i = 0; i < length; ++i)
+    {
+        to[i + offset] = from[i];
+    }
+}
 void sendDataBatch(ICommStream *commStream, ICommStream *commStream2)
 {
     commStream->begin();
     commStream2->begin();
     writeTo(commStream, commHeader, 2);
     writeTo(commStream2, commHeader, 2);
-    writeTo(commStream, SEND_ALL_DATA);
-    writeTo(commStream2, SEND_ALL_DATA);
+    char unescapedBuffer[1 + sizeof(size_t) + sizeof(OscillatorState) * NUM_OSCILLATORS + sizeof(IMUSensor::IMUData)];
+
+    unescapedBuffer[0] = SEND_ALL_DATA;
+
+    size_t offset = 1;
+
     // Provides the current time based on the reference timestamp, used by the server to keep track of the last known arduino time
     //  (Probably could compute it themselves tbh)
     // The sent data is escaped as it may contain the header/footer bytes due to the variable nature of the time
@@ -142,13 +152,8 @@ void sendDataBatch(ICommStream *commStream, ICommStream *commStream2)
         auto returnedTime = TimingUtils::getTimeMillis();
         auto dataBytes = reinterpret_cast<const char *>(&returnedTime);
 
-        // These data bytes may accidentally contain the header or footer, let's escape it to be safe
-        size_t adjustedLength = countEscapedLength(dataBytes, 4);
-        char escapedData[adjustedLength];
-
-        escapeData(dataBytes, escapedData, adjustedLength);
-        writeTo(commStream, escapedData, adjustedLength);
-        writeTo(commStream2, escapedData, adjustedLength);
+        copy(dataBytes, unescapedBuffer, sizeof(size_t), offset);
+        offset += sizeof(size_t);
     }
 
     // Transfer current motor state
@@ -156,16 +161,10 @@ void sendDataBatch(ICommStream *commStream, ICommStream *commStream2)
     {
         auto &data = osc.getState();
 
-        const char *bytes = reinterpret_cast<const char *>(&data);
+        const char *dataBytes = reinterpret_cast<const char *>(&data);
 
-        size_t escapedLength = countEscapedLength(bytes, sizeof(OscillatorState));
-
-        char escapedBuffer[escapedLength];
-
-        escapeData(bytes, escapedBuffer, sizeof(OscillatorState));
-
-        writeTo(commStream, escapedBuffer, escapedLength);
-        writeTo(commStream2, escapedBuffer, escapedLength);
+        copy(dataBytes, unescapedBuffer, sizeof(OscillatorState), offset);
+        offset += sizeof(OscillatorState);
     }
 
     // Transfer IMU data
@@ -173,15 +172,17 @@ void sendDataBatch(ICommStream *commStream, ICommStream *commStream2)
         auto &data = imu.rawData;
         const char *dataBytes = reinterpret_cast<const char *>(&data);
 
-        // These data bytes may accidentally contain the header or footer, let's escape it to be safe
-        auto adjustedLength = countEscapedLength(dataBytes, sizeof(IMUSensor::IMUData));
-        char escapedData[adjustedLength];
-
-        escapeData(dataBytes, escapedData, sizeof(IMUSensor::IMUData));
-
-        writeTo(commStream, escapedData, adjustedLength);
-        writeTo(commStream2, escapedData, adjustedLength);
+        copy(dataBytes, unescapedBuffer, sizeof(IMUSensor::IMUData), offset);
     }
+
+    // These data bytes may accidentally contain the header or footer, let's escape it to be safe
+    auto adjustedLength = countEscapedLength(unescapedBuffer, sizeof(unescapedBuffer));
+
+    char escapedData[adjustedLength];
+    escapeData(unescapedBuffer, escapedData, sizeof(unescapedBuffer));
+
+    writeTo(commStream, escapedData, adjustedLength);
+    writeTo(commStream2, escapedData, adjustedLength);
 
     writeTo(commStream, commFooter, 2);
     writeTo(commStream2, commFooter, 2);
