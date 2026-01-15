@@ -124,6 +124,8 @@ enum PacketInstructions
 
     SESSION_END = 6,
 
+    SET_ANGLE = 7,
+
     SEND_ALL_DATA = 69,
 };
 void copy(const char *from, char *to, size_t length, size_t offset)
@@ -304,6 +306,21 @@ void packetHandler(char *packet, size_t packetSize, ICommStream *commStream)
         sessionStarted = false;
         announceIdentity(&SerialComms);
         WifiComms.PerformOnAllChannels(announceIdentity);
+        break;
+    }
+
+    case SET_ANGLE:
+    {
+        if (!semaphore.acquire(commStream->identifier))
+            break;
+
+        uint8_t targetOscillator = packetData[0];
+        float angle;
+        memcpy(&angle, &packetData[1], sizeof(float));
+
+        Oscillator &oscillator = oscillators[targetOscillator];
+        oscillator.setAngle(angle);
+        oscillator.setActive(false);
         break;
     }
     }

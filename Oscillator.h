@@ -15,9 +15,16 @@ public:
 
     void setPWM(Adafruit_PWMServoDriver &pwm) { this->pwm = &pwm; }
 
+    bool active = true;
+
+    void setActive(bool isActive) { active = isActive; }
+
     // Updates the current state of the motor based on the elapsed time (in seconds)
     void update(double dt)
     {
+        if (!active)
+            return;
+
         // Calculate deltas
         float offsetDelta = OFFSET_CHANGE_FACTOR * (params.offset - state.offset);
         float amplitudeDelta = AMPLITUDE_CHANGE_FACTOR * (params.amp - state.amp);
@@ -34,7 +41,12 @@ public:
 
         float position = state.amp * sinf(state.phase - state.phaseShift) + state.offset;
 
-        uint16_t motorAngle = map(constrain(position, 25, 180), 0, 180, servoMin, servoMax);
+        setAngle(position);
+    }
+
+    void setAngle(float angle)
+    {
+        uint16_t motorAngle = map(constrain(angle, 0, 180), 0, 180, servoMin, servoMax);
 
         pwm->setPWM(id, 0, motorAngle);
     }
@@ -48,6 +60,7 @@ public:
     // Assuming the struct is used as a Serial communication format, one can easily reinterpret a 12byte char[] as an OscillatorUpdateCommand
     void setParams(const OscillatorParams &command)
     {
+        setActive(true);
         params = command;
     }
 
