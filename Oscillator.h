@@ -22,9 +22,6 @@ public:
     // Updates the current state of the motor based on the elapsed time (in seconds)
     void update(double dt)
     {
-        if (!active)
-            return;
-
         // Calculate deltas
         float offsetDelta = OFFSET_CHANGE_FACTOR * (params.offset - state.offset);
         float amplitudeDelta = AMPLITUDE_CHANGE_FACTOR * (params.amp - state.amp);
@@ -38,6 +35,9 @@ public:
         state.offset += offsetDelta * dt;
         state.phaseShift += phaseShiftDelta * dt;
         state.freq += freqDelta * dt;
+
+        if (!active)
+            return;
 
         float position = state.amp * sinf(state.phase - state.phaseShift) + state.offset;
 
@@ -62,6 +62,11 @@ public:
     void reset()
     {
         state = params = defaultParams;
+    }
+
+    void resetPhase()
+    {
+        state.phase = 0;
     }
 
     // Adjusts a parameter of this oscillator using information obtained from an OscillatorUpdateCommand

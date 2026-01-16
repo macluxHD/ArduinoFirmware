@@ -125,6 +125,7 @@ enum PacketInstructions
     SESSION_END = 6,
 
     SET_ANGLE = 7,
+    RESET_PHASE = 8,
 
     SEND_ALL_DATA = 69,
 };
@@ -320,6 +321,16 @@ void packetHandler(char *packet, size_t packetSize, ICommStream *commStream)
 
         Oscillator &oscillator = oscillators[targetOscillator];
         oscillator.setAngle(angle);
+        break;
+    }
+
+    case RESET_PHASE:
+    {
+        if (!semaphore.acquire(commStream->identifier))
+            break;
+
+        for (auto &osc : oscillators)
+            osc.resetPhase();
         break;
     }
     }
