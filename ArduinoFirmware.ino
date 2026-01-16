@@ -320,7 +320,6 @@ void packetHandler(char *packet, size_t packetSize, ICommStream *commStream)
 
         Oscillator &oscillator = oscillators[targetOscillator];
         oscillator.setAngle(angle);
-        oscillator.setActive(false);
         break;
     }
     }

@@ -41,12 +41,19 @@ public:
 
         float position = state.amp * sinf(state.phase - state.phaseShift) + state.offset;
 
-        setAngle(position);
+        uint16_t motorAngle = map(constrain(position, 25, 180), 0, 180, servoMin, servoMax);
+
+        pwm->setPWM(id, 0, motorAngle);
     }
 
     void setAngle(float angle)
     {
-        uint16_t motorAngle = map(constrain(angle, 0, 180), 0, 180, servoMin, servoMax);
+        setActive(false);
+
+        state.freq = 0.5;
+        state.amp = 0;
+        state.offset = angle;
+        state.phaseShift = 0;
 
         pwm->setPWM(id, 0, motorAngle);
     }
