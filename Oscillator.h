@@ -55,6 +55,7 @@ public:
         state.offset = angle;
         state.phaseShift = 0;
 
+        uint16_t motorAngle = map(map(angle, 0, 180, 25, 162), 0, 180, servoMin, servoMax);
         pwm->setPWM(id, 0, motorAngle);
     }
 
