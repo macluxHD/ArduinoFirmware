@@ -15,7 +15,7 @@ const char commFooter[]{'M', 'O'};
 
 // WiFi support stuff
 
-#define WIFI_SUPPORT 1
+#define WIFI_SUPPORT 0
 
 #if WIFI_SUPPORT == 1
 const std::string hostname{"EDMO: " + idCode};
@@ -29,14 +29,11 @@ Oscillator oscillators[] = {
     Oscillator(100, 600),
     Oscillator(100, 600),
     Oscillator(100, 600),
-    Oscillator(100, 600)
-};
+    Oscillator(100, 600)};
 
 const uint16_t NUM_OSCILLATORS = sizeof(oscillators) / sizeof(oscillators[0]); // this number has to match entries in array osc[] (do NOT modify!!)
-const uint16_t oscillatorColours[] {
-    0,120,240,60
-};
-
+const uint16_t oscillatorColours[]{
+    0, 120, 240, 60};
 
 // SPI has faster throughput, but more wires
 #define IMU_SPI 1
