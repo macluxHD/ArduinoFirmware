@@ -14,21 +14,28 @@ This firmware is what directly controls the robot, it receives commands via a se
 ### Setup Steps
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/macluxHD/ArduinoFirmware
    ```
 
 2. **Navigate to the project directory**
+
    ```bash
    cd ArduinoFirmware
    ```
 
 3. **Install dependencies**
+
    ```bash
+   arduino-cli config add board_manager.additional_urls https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
+   arduino-cli core install adafruit:samd
+   arduino-cli lib install "Adafruit PWM Servo Driver Library"
    arduino-cli lib install "Adafruit BNO08x"
    ```
 
 4. **Compile**
+
    ```bash
    arduino-cli compile --fqbn adafruit:samd:adafruit_feather_m0 .
    ```
@@ -36,9 +43,7 @@ This firmware is what directly controls the robot, it receives commands via a se
 5. **Upload**
 
    Change the `--port` parameter to the corresponding port that the robot is connected to on windows it may be `COM2` or `COM3` etc
-   
+
    ```bash
    arduino-cli upload --fqbn adafruit:samd:adafruit_feather_m0 --port /dev/ttyACM0 .
    ```
-
-
